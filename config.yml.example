@@ -1,0 +1,55 @@
+bot:
+    # telegram bot token
+    token: "BOT_TOKEN"
+
+    # database path
+    databasePath: "./secretsquirrel.db"
+
+    # point of contact shown to blacklisted users (optional)
+    #blacklistContact: "http://t.me/invite/something"
+
+limits:
+    # allow sending contacts
+    allowContacts: false
+
+    # allow sending arbitrary document/files.
+    allowDocuments: true
+
+    # allow mods to remove messages without issuing a cooldown
+    allowRemoveCommand: false
+
+    # enable signing messages using /sign or /tsign as
+    # well as setting a tripcode
+    enableSigning: true
+
+    # limit usage of /sign to once in every interval (seconds)
+    # defaults to 600 if not specified, set to 0 to disable
+    signLimitInterval: 600
+    
+    # duration (hours) during which new users can't send media or forwards (optional)
+    #mediaLimitPeriod: 3
+
+#
+# You shouldn't need to change any of the values below this point.
+# But I have included them here for the sake of customizability.
+#
+
+cooldown:
+    cooldownTimeBegin: [1, 5, 25, 120, 720, 4320]
+    cooldownTimeLinearM: 4320
+    cooldownTimeLinearB: 10080
+    warnExpireHours: 168 # 7 days
+
+karma:
+    karmaPlusOne: 1
+    karmaWarnPenalty: 10
+
+spam:
+    spamLimit: 3
+    spamLimitHit: 6
+    spamIntervalSeconds: 5
+    scoreSticker: 1.5
+    scoreBaseMessage: 0.75
+    scoreBaseForward: 1.25
+    scoreTextCharacter: 0.002
+    scoreTextLineBreak: 0.1
