@@ -17,12 +17,13 @@ const (
 	PromotedAdminMessage     = "You've been promoted to admin, run /adminhelp for a list of commands."
 	KarmaThankMessage        = "You just gave this user some sweet karma, awesome!"
 	KarmaNotificationMessage = "You've just been given sweet karma! (check /info to see your karma or /toggleKarma to turn these notifications off)"
-	VersionMessage           = "Secretsquirrel version %f - https://github.com/dazzleey/secretsquirrel"
+	VersionMessage           = "Secretsquirrel version %s - https://github.com/dazzleey/secretsquirrel"
 
 	CommandDisabledError   = "This command has been disabled."
 	NoReplyError           = "You need to reply to a message to use this command."
 	NotInCacheError        = "Message not found in cache... (24h passed or bot was restarted)"
-	NoUserError            = "No user found by that name."
+	NoUserError            = "User not found."
+	NoUserByNameError      = "No user found by that name."
 	NoUserByIdError        = "No user found by that id! Note that all ids rotate every 24 hours."
 	CooldownError          = "You're on cooldown. Your cooldown expires at %s"
 	AlreadyWarnedError     = "A warning has already been issued for this message."
@@ -35,6 +36,7 @@ const (
 	InvalidTripFormatError = "Given tripcode is not valid, the format is <code>name#pass</code>"
 	NoTripcodeError        = "You don't have a tripcode set."
 	MediaLimitError        = "You can't send media or forward messages at this time, try again later."
+	SigningDisabledError   = "Signing is disabled."
 
 	ModeratorHelp = `<i>Moderators can use the following commands</i>:
 	/modhelp - show this text

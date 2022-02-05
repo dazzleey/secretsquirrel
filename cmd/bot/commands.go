@@ -97,7 +97,7 @@ func cmdModInfo(bot *SecretSquirrel, ctx *BotContext) {
 	}
 
 	if user, ok := (*bot.Users)[cm.userID]; !ok {
-		bot.sendSystemMessageReply(ctx.Message.From.ID, "User not found", ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.Message.From.ID, messages.NoUserError, ctx.Message.MessageID)
 		return
 
 	} else {
@@ -112,7 +112,7 @@ func cmdModInfo(bot *SecretSquirrel, ctx *BotContext) {
 
 func cmdSignMessage(bot *SecretSquirrel, ctx *BotContext) {
 	if !cfg.Limits.EnableSigning {
-		bot.sendSystemMessage(ctx.Message.From.ID, "Signing is disabled.")
+		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabledError)
 		return
 	}
 
@@ -125,7 +125,7 @@ func cmdSignMessage(bot *SecretSquirrel, ctx *BotContext) {
 
 func cmdTSign(bot *SecretSquirrel, ctx *BotContext) {
 	if !cfg.Limits.EnableSigning {
-		bot.sendSystemMessage(ctx.Message.From.ID, "Signing is disabled.")
+		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabledError)
 		return
 	}
 
@@ -260,7 +260,7 @@ func cmdPromoteMod(bot *SecretSquirrel, ctx *BotContext) {
 	user, err := database.FindUser(bot.Db, database.ByUsername(username))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			bot.sendSystemMessage(ctx.User.ID, messages.NoUserError)
+			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByNameError)
 		}
 	}
 
@@ -274,7 +274,7 @@ func cmdPromoteAdmin(bot *SecretSquirrel, ctx *BotContext) {
 	user, err := database.FindUser(bot.Db, database.ByUsername(username))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			bot.sendSystemMessage(ctx.User.ID, messages.NoUserError)
+			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByNameError)
 		}
 	}
 

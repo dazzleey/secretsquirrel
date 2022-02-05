@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	BotVersion = 1.0
+	BotVersion = "1.0"
 )
 
 type SecretSquirrel struct {
