@@ -22,25 +22,50 @@ const (
 )
 
 type SecretSquirrel struct {
-	Api       *tgbotapi.BotAPI
-	Db        *gorm.DB
-	Users     *UserCache
-	Cache     *MessageCache
-	UserQueue *PriorityQueue
-	Queue     *Queue
-	Spam      *Scorekeeper
-	Scheduler *gocron.Scheduler
+	Api          *tgbotapi.BotAPI
+	Db           *gorm.DB
+	Users        *UserCache
+	Cache        *MessageCache
+	UserQueue    *PriorityQueue
+	JobQueue     *JobQueue
+	MessageQueue *MessageQueue
+	Spam         *Scorekeeper
+	Scheduler    *gocron.Scheduler
 }
 
-type Queue struct {
+type JobQueue struct {
 	ch chan *QueueJob
 	mu sync.Mutex
 }
 
+type MessageQueue struct {
+	mu    sync.Mutex
+	queue map[int]*QueuedMessage
+}
+
+func (mq *MessageQueue) Add(msid int, qm *QueuedMessage) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	mq.queue[msid] = qm
+}
+
+func (mq *MessageQueue) Delete(msid int) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	delete(mq.queue, msid)
+}
+
+type QueuedMessage struct {
+	sent  int
+	total int
+}
+
 // handleMessage does further checks on the message and user before queueing the job for relaying by workers.
 func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
-	bot.Queue.mu.Lock()
-	defer bot.Queue.mu.Unlock()
+	bot.JobQueue.mu.Lock()
+	defer bot.JobQueue.mu.Unlock()
 
 	// ignore messages from untracked users.
 	if ctx.User == nil {
@@ -72,6 +97,8 @@ func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
 		return nil
 	}
 
+	bot.MessageQueue.Add(ctx.CacheMessageID, &QueuedMessage{0, len(bot.UserQueue.items) - 1})
+
 	// echo message to all users.
 	for _, uindex := range bot.UserQueue.Get() {
 		user := (*bot.Users)[uindex]
@@ -82,7 +109,7 @@ func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
 			continue
 		}
 
-		bot.Queue.ch <- &QueueJob{Bot: bot, User: &user, Context: ctx}
+		bot.JobQueue.ch <- &QueueJob{Bot: bot, User: &user, Context: ctx}
 	}
 
 	return nil
@@ -249,14 +276,18 @@ func initBot() *SecretSquirrel {
 	bot.Cache = NewMessageCache()
 
 	// create message queue and start workers.
-	bot.Queue = &Queue{ch: make(chan *QueueJob), mu: sync.Mutex{}}
+	bot.JobQueue = &JobQueue{ch: make(chan *QueueJob), mu: sync.Mutex{}}
 	for i := 0; i < MaxWorkerPool; i++ {
-		go worker(i, bot.Queue.ch)
+		go worker(i, bot.JobQueue.ch)
 	}
 
 	bot.UserQueue = NewPriorityQueue()
-	bot.Users = &UserCache{}
+	bot.MessageQueue = &MessageQueue{
+		mu:    sync.Mutex{},
+		queue: map[int]*QueuedMessage{},
+	}
 
+	bot.Users = &UserCache{}
 	users, err := database.FindUsers(bot.Db, database.AreJoined)
 	if err != nil {
 		log.Panic("initApp: db query failed.")

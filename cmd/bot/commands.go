@@ -306,28 +306,35 @@ func cmdRemove(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	bot.sendSystemMessageReply(cm.userID, messages.MessageDeletedMessage, ctx.ReplyID)
+	_, err = bot.sendSystemMessageReply(cm.userID, messages.MessageDeletedMessage, ctx.ReplyID)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// cancel unsent queued messages
+	bot.MessageQueue.Delete(ctx.ReplyID)
 
 	go func() {
 		for _, uindex := range bot.UserQueue.Get() {
-			var user_replyID int = -1
-			user := (*bot.Users)[uindex]
+			if uindex != cm.userID {
+				var user_replyID int = -1
+				user := (*bot.Users)[uindex]
 
-			if ctx.ReplyID != -1 {
-				user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
-				if err != nil {
-					fmt.Println(err)
-					continue
+				if ctx.ReplyID != -1 {
+					user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+				}
+
+				// delete each message
+				// api might get mad if this deletes more than 30 messages.
+				if user_replyID != -1 {
+					bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
 				}
 			}
-
-			// delete each message
-			// api might get mad if this deletes more than 30 messages.
-			if user_replyID != -1 {
-				bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
-			}
 		}
-		bot.Cache.deleteMappings(ctx.ReplyID)
 	}()
 }
 
@@ -370,28 +377,35 @@ func cmdDelete(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, t), replyID)
+	_, err = bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, t), replyID)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	// cancel unsent queued messages
+	bot.MessageQueue.Delete(ctx.ReplyID)
 
 	go func() {
 		// echo message to all users.
 		for _, uindex := range bot.UserQueue.Get() {
-			var user_replyID int = -1
-			user := (*bot.Users)[uindex]
+			if cm.userID != uindex {
+				var user_replyID int = -1
+				user := (*bot.Users)[uindex]
 
-			if ctx.ReplyID != -1 {
-				user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
-				if err != nil {
-					fmt.Println(err)
-					continue
+				if ctx.ReplyID != -1 {
+					user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+				}
+
+				// delete each message
+				if user_replyID != -1 {
+					bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
 				}
 			}
-
-			// delete each message
-			if user_replyID != -1 {
-				bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
-			}
 		}
-		bot.Cache.deleteMappings(ctx.ReplyID)
 	}()
 }
 

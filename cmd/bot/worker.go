@@ -24,26 +24,36 @@ func worker(id int, ch <-chan *QueueJob) {
 	minTimeBetweenRuns := time.Duration(math.Ceil(1e9 / (MaxCallsPerSecond / float64(MaxWorkerPool))))
 
 	for j := range ch {
-		lastRun := time.Now()
-		timeUntilNextRun := -(time.Since(lastRun) - minTimeBetweenRuns)
-		if timeUntilNextRun > 0 {
-			time.Sleep(timeUntilNextRun)
-		}
+		// check if the message has been deleted from the queue
+		if q, ok := j.Bot.MessageQueue.queue[j.Context.CacheMessageID]; ok {
+			lastRun := time.Now()
+			timeUntilNextRun := -(time.Since(lastRun) - minTimeBetweenRuns)
+			if timeUntilNextRun > 0 {
+				time.Sleep(timeUntilNextRun)
+			}
 
-		msg := j.Bot.NewMessage(j.Context, j.User, j.Context.CacheMessageID)
-		for {
-			s, err := j.Bot.Api.Send(msg.Config)
-			if err != nil {
-				fmt.Println(err)
-				// try again if rate-limited
-				if err.(*tgbotapi.Error).Code == 429 {
-					time.Sleep(time.Duration(err.(*tgbotapi.Error).ResponseParameters.RetryAfter) * time.Second)
-					continue
+			msg := j.Bot.NewMessage(j.Context, j.User, j.Context.CacheMessageID)
+			for {
+				s, err := j.Bot.Api.Send(msg.Config)
+				if err != nil {
+					fmt.Println(err)
+					// try again if rate-limited
+					if err.(*tgbotapi.Error).Code == 429 {
+						time.Sleep(time.Duration(err.(*tgbotapi.Error).ResponseParameters.RetryAfter) * time.Second)
+						continue
+					}
+					break
 				}
+				j.Bot.Cache.saveMapping(msg.User.ID, j.Context.CacheMessageID, int(s.MessageID))
 				break
 			}
-			j.Bot.Cache.saveMapping(msg.User.ID, j.Context.CacheMessageID, int(s.MessageID))
-			break
+
+			// delete message from queue if this is the last job
+			q.sent++
+			if q.sent == q.total {
+				j.Bot.MessageQueue.Delete(j.Context.CacheMessageID)
+			}
 		}
+
 	}
 }
