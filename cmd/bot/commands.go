@@ -9,7 +9,6 @@ import (
 
 	"secretsquirrel/database"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"gorm.io/gorm"
 )
 
@@ -311,31 +310,7 @@ func cmdRemove(bot *SecretSquirrel, ctx *BotContext) {
 		fmt.Println(err)
 	}
 
-	// cancel unsent queued messages
-	bot.MessageQueue.Delete(ctx.ReplyID)
-
-	go func() {
-		for _, uindex := range bot.UserQueue.Get() {
-			if uindex != cm.userID {
-				var user_replyID int = -1
-				user := (*bot.Users)[uindex]
-
-				if ctx.ReplyID != -1 {
-					user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
-					if err != nil {
-						fmt.Println(err)
-						continue
-					}
-				}
-
-				// delete each message
-				// api might get mad if this deletes more than 30 messages.
-				if user_replyID != -1 {
-					bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
-				}
-			}
-		}
-	}()
+	go bot.deleteMessage(ctx, cm)
 }
 
 func cmdDelete(bot *SecretSquirrel, ctx *BotContext) {
@@ -362,51 +337,8 @@ func cmdDelete(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	user, err := database.FindUser(bot.Db, database.ByID(cm.userID))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	t := bot.AddWarning(cfg, user)
-	cm.warned = true
-
-	replyID, err := bot.Cache.lookupCacheMessageValue(cm.userID, ctx.ReplyID)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	_, err = bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, t), replyID)
-	if err != nil {
-		fmt.Println(err)
-	}
-
-	// cancel unsent queued messages
-	bot.MessageQueue.Delete(ctx.ReplyID)
-
-	go func() {
-		// echo message to all users.
-		for _, uindex := range bot.UserQueue.Get() {
-			if cm.userID != uindex {
-				var user_replyID int = -1
-				user := (*bot.Users)[uindex]
-
-				if ctx.ReplyID != -1 {
-					user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
-					if err != nil {
-						fmt.Println(err)
-						continue
-					}
-				}
-
-				// delete each message
-				if user_replyID != -1 {
-					bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
-				}
-			}
-		}
-	}()
+	bot.giveWarning(ctx, cm)
+	go bot.deleteMessage(ctx, cm)
 }
 
 func cmdWarn(bot *SecretSquirrel, ctx *BotContext) {
@@ -433,22 +365,7 @@ func cmdWarn(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	user, err := database.FindUser(bot.Db, database.ByID(cm.userID))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	t := bot.AddWarning(cfg, user)
-	cm.warned = true
-
-	replyID, err := bot.Cache.lookupCacheMessageValue(cm.userID, ctx.ReplyID)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, t), replyID)
+	bot.giveWarning(ctx, cm)
 }
 
 func cmdBlacklist(bot *SecretSquirrel, ctx *BotContext) {
@@ -471,26 +388,21 @@ func cmdBlacklist(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	user, err := database.FindUser(bot.Db, database.ByID(cm.userID))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
+	user := (*bot.Users)[cm.userID]
 	cm.warned = true
 
-	bot.UpdatesUser(user, database.User{
+	bot.UpdatesUser(&user, database.User{
 		Rank:            database.RankBanned,
 		Left:            sql.NullTime{Time: time.Now(), Valid: true},
 		BlacklistReason: reason,
 	})
 
-	replyText := fmt.Sprintf(messages.BlacklistedError, user.BlacklistReason)
+	msg := fmt.Sprintf(messages.BlacklistedError, user.BlacklistReason)
 	if cfg.Bot.BlacklistContact != "" {
-		replyText += fmt.Sprintf("\n\nContact: %s", cfg.Bot.BlacklistContact)
+		msg += fmt.Sprintf("\n\nContact: %s", cfg.Bot.BlacklistContact)
 	}
 
-	bot.sendSystemMessage(user.ID, replyText)
+	bot.sendSystemMessage(user.ID, msg)
 }
 
 func cmdVersion(bot *SecretSquirrel, ctx *BotContext) {

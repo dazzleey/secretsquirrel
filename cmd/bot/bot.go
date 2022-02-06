@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"secretsquirrel/config"
 	"secretsquirrel/crypt"
 	"secretsquirrel/database"
 	"secretsquirrel/messages"
@@ -34,8 +33,8 @@ type SecretSquirrel struct {
 }
 
 type JobQueue struct {
-	ch chan *QueueJob
 	mu sync.Mutex
+	ch chan *QueueJob
 }
 
 type MessageQueue struct {
@@ -64,9 +63,6 @@ type QueuedMessage struct {
 
 // handleMessage does further checks on the message and user before queueing the job for relaying by workers.
 func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
-	bot.JobQueue.mu.Lock()
-	defer bot.JobQueue.mu.Unlock()
-
 	// ignore messages from untracked users.
 	if ctx.User == nil {
 		bot.sendSystemMessage(ctx.User.ID, messages.UserNotInChatMessage)
@@ -87,8 +83,6 @@ func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
 		return nil
 	}
 
-	ctx.CacheMessageID = bot.Cache.newMessage(ctx)
-
 	// check types limits
 	if ctx.ContentType == DocumentContentType && !cfg.Limits.AllowDocuments {
 		return nil
@@ -97,21 +91,7 @@ func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
 		return nil
 	}
 
-	bot.MessageQueue.Add(ctx.CacheMessageID, &QueuedMessage{0, len(bot.UserQueue.items) - 1})
-
-	// echo message to all users.
-	for _, uindex := range bot.UserQueue.Get() {
-		user := (*bot.Users)[uindex]
-		// only resend message back to the sender if debug is enabled.
-		// this seems to break replies while debug is enabled. idk why
-		if user.ID == ctx.Message.From.ID && !user.DebugEnabled {
-			bot.Cache.saveMapping(user.ID, ctx.CacheMessageID, ctx.Message.MessageID)
-			continue
-		}
-
-		bot.JobQueue.ch <- &QueueJob{Bot: bot, User: &user, Context: ctx}
-	}
-
+	bot.sendMessage(ctx)
 	return nil
 }
 
@@ -204,8 +184,11 @@ func (bot *SecretSquirrel) giveKarma(ctx *BotContext) {
 	bot.sendSystemMessage(ctx.User.ID, messages.KarmaThankMessage)
 }
 
-func (bot *SecretSquirrel) AddWarning(cfg config.Config, user *database.User) time.Time {
-	var cooldownTime int
+func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
+	var (
+		user         = (*bot.Users)[cm.userID]
+		cooldownTime int
+	)
 
 	if user.Warnings < len(cfg.Cooldown.CooldownTimeBegin) {
 		cooldownTime = cfg.Cooldown.CooldownTimeBegin[user.Warnings]
@@ -214,12 +197,19 @@ func (bot *SecretSquirrel) AddWarning(cfg config.Config, user *database.User) ti
 		cooldownTime = cfg.Cooldown.CooldownTimeLinearM*x + cfg.Cooldown.CooldownTimeLinearB
 	}
 
-	bot.UpdatesUser(user, database.User{
+	bot.UpdatesUser(&user, database.User{
 		CooldownUntil: sql.NullTime{Time: time.Now().Add(time.Minute * time.Duration(cooldownTime)), Valid: true},
 		Karma:         user.Karma - cfg.Karma.KarmaWarnPenalty,
 	})
 
-	return user.CooldownUntil.Time
+	cm.warned = true
+	replyID, err := bot.Cache.lookupCacheMessageValue(cm.userID, ctx.ReplyID)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, user.CooldownUntil.Time), replyID)
 }
 
 func (bot *SecretSquirrel) sendSystemMessage(userID int64, message string) (tgbotapi.Message, error) {
@@ -234,19 +224,67 @@ func (bot *SecretSquirrel) sendSystemMessage(userID int64, message string) (tgbo
 }
 
 func (bot *SecretSquirrel) sendSystemMessageReply(userID int64, message string, replyID int) (tgbotapi.Message, error) {
-	baseChat := tgbotapi.BaseChat{
-		ChatID:           userID,
-		ReplyToMessageID: replyID,
-	}
-
 	msg := tgbotapi.MessageConfig{
-		BaseChat:              baseChat,
+		BaseChat:              tgbotapi.BaseChat{ChatID: userID, ReplyToMessageID: replyID},
 		Text:                  message,
 		ParseMode:             "HTML",
 		DisableWebPagePreview: false,
 	}
 
 	return bot.Api.Send(&msg)
+}
+
+func (bot *SecretSquirrel) sendMessage(ctx *BotContext) {
+	bot.JobQueue.mu.Lock()
+	defer bot.JobQueue.mu.Unlock()
+
+	ctx.CacheMessageID = bot.Cache.newMessage(ctx)
+
+	bot.MessageQueue.Add(ctx.CacheMessageID, &QueuedMessage{0, len(bot.UserQueue.items) - 1})
+
+	// queue job for all users.
+	for _, uindex := range bot.UserQueue.Get() {
+		user := (*bot.Users)[uindex]
+
+		// only resend message back to the sender if debug is enabled.
+		// this seems to break replies while debug is enabled. idk why
+		if user.ID == ctx.Message.From.ID && !user.DebugEnabled {
+			bot.Cache.saveMapping(user.ID, ctx.CacheMessageID, ctx.Message.MessageID)
+			continue
+		}
+
+		bot.JobQueue.ch <- &QueueJob{Bot: bot, User: &user, Context: ctx}
+	}
+
+}
+
+func (bot *SecretSquirrel) deleteMessage(ctx *BotContext, cm *CachedMessage) {
+	// cancel unsent queued messages
+	bot.MessageQueue.Delete(ctx.ReplyID)
+
+	for _, uindex := range bot.UserQueue.Get() {
+		if uindex != cm.userID {
+			var (
+				user         = (*bot.Users)[uindex]
+				user_replyID = -1
+				err          error
+			)
+
+			if ctx.ReplyID != -1 {
+				user_replyID, err = bot.Cache.lookupCacheMessageValue(user.ID, ctx.ReplyID)
+				if err != nil {
+					fmt.Println(err)
+					continue
+				}
+			}
+
+			// delete each message
+			// api might get mad if this deletes more than 30 messages a second. I'm not sure
+			if user_replyID != -1 {
+				bot.Api.Send(tgbotapi.NewDeleteMessage(user.ID, user_replyID))
+			}
+		}
+	}
 }
 
 // UpdateUser wraps *gorm.DB.Model().Update() and adds the updated database.User to the bot cache.
@@ -276,7 +314,7 @@ func initBot() *SecretSquirrel {
 	bot.Cache = NewMessageCache()
 
 	// create message queue and start workers.
-	bot.JobQueue = &JobQueue{ch: make(chan *QueueJob), mu: sync.Mutex{}}
+	bot.JobQueue = &JobQueue{mu: sync.Mutex{}, ch: make(chan *QueueJob)}
 	for i := 0; i < MaxWorkerPool; i++ {
 		go worker(i, bot.JobQueue.ch)
 	}
