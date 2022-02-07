@@ -7,6 +7,7 @@ import (
 	"secretsquirrel/crypt"
 	"secretsquirrel/database"
 	"secretsquirrel/messages"
+	"secretsquirrel/util"
 	"strings"
 	"sync"
 	"time"
@@ -117,7 +118,7 @@ func (bot *SecretSquirrel) handleUpdate(u tgbotapi.Update) {
 	// check if on cooldown or blacklisted before anything else.
 	if ctx.User != nil {
 		if ctx.User.IsInCooldown() {
-			bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.CooldownError, ctx.User.CooldownUntil.Time.String()))
+			bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.CooldownError, ctx.User.CooldownUntil.Time.Format(time.RFC822)))
 			return
 		}
 
@@ -186,19 +187,19 @@ func (bot *SecretSquirrel) giveKarma(ctx *BotContext) {
 
 func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
 	var (
-		user         = (*bot.Users)[cm.userID]
-		cooldownTime int
+		user             = (*bot.Users)[cm.userID]
+		cooldownDuration time.Duration
 	)
 
 	if user.Warnings < len(cfg.Cooldown.CooldownTimeBegin) {
-		cooldownTime = cfg.Cooldown.CooldownTimeBegin[user.Warnings]
+		cooldownDuration = time.Duration(cfg.Cooldown.CooldownTimeBegin[user.Warnings]) * time.Minute
 	} else {
 		x := user.Warnings - len(cfg.Cooldown.CooldownTimeBegin)
-		cooldownTime = cfg.Cooldown.CooldownTimeLinearM*x + cfg.Cooldown.CooldownTimeLinearB
+		cooldownDuration = time.Duration(cfg.Cooldown.CooldownTimeLinearM*x+cfg.Cooldown.CooldownTimeLinearB) * time.Minute
 	}
 
 	bot.UpdatesUser(&user, database.User{
-		CooldownUntil: sql.NullTime{Time: time.Now().Add(time.Minute * time.Duration(cooldownTime)), Valid: true},
+		CooldownUntil: sql.NullTime{Time: time.Now().Add(cooldownDuration), Valid: true},
 		Karma:         user.Karma - cfg.Karma.KarmaWarnPenalty,
 	})
 
@@ -209,7 +210,7 @@ func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
 		return
 	}
 
-	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, user.CooldownUntil.Time), replyID)
+	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, util.TimeStr(cooldownDuration)), replyID)
 }
 
 func (bot *SecretSquirrel) sendSystemMessage(userID int64, message string) (tgbotapi.Message, error) {
