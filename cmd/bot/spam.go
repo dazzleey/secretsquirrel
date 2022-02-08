@@ -10,6 +10,13 @@ type Scorekeeper struct {
 	scores map[userID]float32
 }
 
+func NewScoreKeeper() *Scorekeeper {
+	return &Scorekeeper{
+		lock:   &sync.Mutex{},
+		scores: map[int64]float32{},
+	}
+}
+
 func (k *Scorekeeper) increaseSpamScore(uid userID, n float32) bool {
 	k.lock.Lock()
 	defer k.lock.Unlock()

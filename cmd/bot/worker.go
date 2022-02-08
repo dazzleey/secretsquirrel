@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"secretsquirrel/database"
+	"sync"
 	"time"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
@@ -12,6 +13,18 @@ type QueueJob struct {
 	Bot     *SecretSquirrel
 	User    *database.User
 	Context *BotContext
+}
+
+type JobQueue struct {
+	mu sync.Mutex
+	ch chan *QueueJob
+}
+
+func NewJobQueue() *JobQueue {
+	return &JobQueue{
+		mu: sync.Mutex{},
+		ch: make(chan *QueueJob),
+	}
 }
 
 const (

@@ -4,6 +4,37 @@ import (
 	"sync"
 )
 
+type MessageQueueItem struct {
+	sent  int
+	total int
+}
+
+type MessageQueue struct {
+	mu    sync.Mutex
+	queue map[int]*MessageQueueItem
+}
+
+func (mq *MessageQueue) Add(msid int, qm *MessageQueueItem) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	mq.queue[msid] = qm
+}
+
+func (mq *MessageQueue) Delete(msid int) {
+	mq.mu.Lock()
+	defer mq.mu.Unlock()
+
+	delete(mq.queue, msid)
+}
+
+func NewMessageQueue() *MessageQueue {
+	return &MessageQueue{
+		mu:    sync.Mutex{},
+		queue: map[int]*MessageQueueItem{},
+	}
+}
+
 type PriorityQueue struct {
 	items   []int64
 	itemSet map[int64]struct{}

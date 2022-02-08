@@ -9,7 +9,6 @@ import (
 	"secretsquirrel/messages"
 	"secretsquirrel/util"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-co-op/gocron"
@@ -31,35 +30,6 @@ type SecretSquirrel struct {
 	MessageQueue *MessageQueue
 	Spam         *Scorekeeper
 	Scheduler    *gocron.Scheduler
-}
-
-type JobQueue struct {
-	mu sync.Mutex
-	ch chan *QueueJob
-}
-
-type MessageQueue struct {
-	mu    sync.Mutex
-	queue map[int]*QueuedMessage
-}
-
-func (mq *MessageQueue) Add(msid int, qm *QueuedMessage) {
-	mq.mu.Lock()
-	defer mq.mu.Unlock()
-
-	mq.queue[msid] = qm
-}
-
-func (mq *MessageQueue) Delete(msid int) {
-	mq.mu.Lock()
-	defer mq.mu.Unlock()
-
-	delete(mq.queue, msid)
-}
-
-type QueuedMessage struct {
-	sent  int
-	total int
 }
 
 // handleMessage does further checks on the message and user before queueing the job for relaying by workers.
@@ -241,7 +211,7 @@ func (bot *SecretSquirrel) sendMessage(ctx *BotContext) {
 
 	ctx.CacheMessageID = bot.Cache.newMessage(ctx)
 
-	bot.MessageQueue.Add(ctx.CacheMessageID, &QueuedMessage{0, len(bot.UserQueue.items) - 1})
+	bot.MessageQueue.Add(ctx.CacheMessageID, &MessageQueueItem{0, len(bot.UserQueue.items) - 1})
 
 	// queue job for all users.
 	for _, uindex := range bot.UserQueue.Get() {
@@ -315,16 +285,13 @@ func initBot() *SecretSquirrel {
 	bot.Cache = NewMessageCache()
 
 	// create message queue and start workers.
-	bot.JobQueue = &JobQueue{mu: sync.Mutex{}, ch: make(chan *QueueJob)}
+	bot.JobQueue = NewJobQueue()
 	for i := 0; i < MaxWorkerPool; i++ {
 		go worker(i, bot.JobQueue.ch)
 	}
 
 	bot.UserQueue = NewPriorityQueue()
-	bot.MessageQueue = &MessageQueue{
-		mu:    sync.Mutex{},
-		queue: map[int]*QueuedMessage{},
-	}
+	bot.MessageQueue = NewMessageQueue()
 
 	bot.Users = &UserCache{}
 	users, err := database.FindUsers(bot.Db, database.AreJoined)
@@ -337,10 +304,7 @@ func initBot() *SecretSquirrel {
 		bot.UserQueue.Add(u.ID)
 	}
 
-	bot.Spam = &Scorekeeper{
-		lock:   &sync.Mutex{},
-		scores: map[int64]float32{},
-	}
+	bot.Spam = NewScoreKeeper()
 
 	bot.Scheduler = gocron.NewScheduler(time.UTC)
 	bot.Scheduler.Every(5).Seconds().Do(bot.Spam.expireTask)
