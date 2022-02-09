@@ -36,21 +36,21 @@ type SecretSquirrel struct {
 func (bot *SecretSquirrel) handleMessage(ctx *BotContext) error {
 	// ignore messages from untracked users.
 	if ctx.User == nil {
-		bot.sendSystemMessage(ctx.User.ID, messages.UserNotInChatMessage)
+		bot.sendSystemMessage(ctx.User.ID, messages.UserNotInChat)
 		return nil
 	}
 
 	// check media limit period
 	if (ctx.HasFile() || ctx.IsForward()) && cfg.Limits.MediaLimitPeriod > 0 {
 		if int(time.Since(ctx.User.Joined).Hours()) < cfg.Limits.MediaLimitPeriod {
-			bot.sendSystemMessage(ctx.User.ID, messages.MediaLimitError)
+			bot.sendSystemMessage(ctx.User.ID, messages.MediaLimit)
 			return nil
 		}
 	}
 
 	// check if user is spamming.
 	if ok := bot.Spam.increaseSpamScore(ctx.User.ID, calculateSpamScore(ctx)); !ok {
-		bot.sendSystemMessage(ctx.User.ID, messages.SpamError)
+		bot.sendSystemMessage(ctx.User.ID, messages.Spam)
 		return nil
 	}
 
@@ -88,12 +88,12 @@ func (bot *SecretSquirrel) handleUpdate(u tgbotapi.Update) {
 	// check if on cooldown or blacklisted before anything else.
 	if ctx.User != nil {
 		if ctx.User.IsInCooldown() {
-			bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.CooldownError, ctx.User.CooldownUntil.Time.Format(time.RFC822)))
+			bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.Cooldown, ctx.User.CooldownUntil.Time.Format(time.RFC822)))
 			return
 		}
 
 		if ctx.User.IsBlacklisted() {
-			msgText := fmt.Sprintf(messages.BlacklistedError, ctx.User.BlacklistReason)
+			msgText := fmt.Sprintf(messages.Blacklisted, ctx.User.BlacklistReason)
 			if cfg.Bot.BlacklistContact != "" {
 				msgText += fmt.Sprintf("\n\nContact: %s", cfg.Bot.BlacklistContact)
 			}
@@ -122,23 +122,23 @@ func (bot *SecretSquirrel) handleUpdate(u tgbotapi.Update) {
 
 func (bot *SecretSquirrel) giveKarma(ctx *BotContext) {
 	if !ctx.IsReply() {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReplyError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReply, ctx.Message.MessageID)
 		return
 	}
 
 	cm, err := bot.Cache.getMessage(ctx.ReplyID)
 	if err != nil {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.NotInCacheError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.NotInCache, ctx.Message.MessageID)
 		return
 	}
 
 	if cm.hasUpvoted(ctx.User.ID) {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyUpvotedError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyUpvoted, ctx.Message.MessageID)
 		return
 	}
 
 	if cm.userID == ctx.User.ID {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.UpvoteOwnMessageError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.UpvoteOwnMessage, ctx.Message.MessageID)
 		return
 	}
 
@@ -149,10 +149,10 @@ func (bot *SecretSquirrel) giveKarma(ctx *BotContext) {
 
 	if !user.HideKarma {
 		reply, _ := bot.Cache.lookupCacheMessageValue(cm.userID, ctx.ReplyID)
-		bot.sendSystemMessageReply(user.ID, messages.UpvoteOwnMessageError, reply)
+		bot.sendSystemMessageReply(user.ID, messages.UpvoteOwnMessage, reply)
 	}
 
-	bot.sendSystemMessage(ctx.User.ID, messages.KarmaThankMessage)
+	bot.sendSystemMessage(ctx.User.ID, messages.KarmaThank)
 }
 
 func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
@@ -180,7 +180,7 @@ func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
 		return
 	}
 
-	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldownMessage, util.TimeStr(cooldownDuration)), replyID)
+	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldown, util.TimeStr(cooldownDuration)), replyID)
 }
 
 func (bot *SecretSquirrel) sendSystemMessage(userID int64, message string) (tgbotapi.Message, error) {

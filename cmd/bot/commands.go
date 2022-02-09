@@ -42,7 +42,7 @@ func cmdStart(bot *SecretSquirrel, ctx *BotContext) {
 	if ctx.User != nil {
 		// already in the chat.
 		if !ctx.User.Left.Valid {
-			bot.sendSystemMessage(ctx.Message.From.ID, messages.UserInChatMessage)
+			bot.sendSystemMessage(ctx.Message.From.ID, messages.UserAlreadyInChat)
 			return
 		}
 		bot.UpdateUser(ctx.User, "left", sql.NullTime{})
@@ -96,7 +96,7 @@ func cmdModInfo(bot *SecretSquirrel, ctx *BotContext) {
 	}
 
 	if user, ok := (*bot.Users)[cm.userID]; !ok {
-		bot.sendSystemMessageReply(ctx.Message.From.ID, messages.NoUserError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.Message.From.ID, messages.NoUser, ctx.Message.MessageID)
 		return
 
 	} else {
@@ -111,7 +111,7 @@ func cmdModInfo(bot *SecretSquirrel, ctx *BotContext) {
 
 func cmdSignMessage(bot *SecretSquirrel, ctx *BotContext) {
 	if !cfg.Limits.EnableSigning {
-		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabledError)
+		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabled)
 		return
 	}
 
@@ -124,7 +124,7 @@ func cmdSignMessage(bot *SecretSquirrel, ctx *BotContext) {
 
 func cmdTSign(bot *SecretSquirrel, ctx *BotContext) {
 	if !cfg.Limits.EnableSigning {
-		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabledError)
+		bot.sendSystemMessage(ctx.Message.From.ID, messages.SigningDisabled)
 		return
 	}
 
@@ -259,12 +259,12 @@ func cmdPromoteMod(bot *SecretSquirrel, ctx *BotContext) {
 	user, err := database.FindUser(bot.Db, database.ByUsername(username))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByNameError)
+			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByName)
 		}
 	}
 
 	bot.UpdateUser(ctx.User, "rank", database.RankMod)
-	bot.sendSystemMessage(user.ID, messages.PromotedModMessage)
+	bot.sendSystemMessage(user.ID, messages.PromotedMod)
 	bot.sendSystemMessageReply(ctx.User.ID, fmt.Sprintf("User Promoted to Mod: @%s", username), ctx.Message.MessageID)
 }
 
@@ -273,18 +273,18 @@ func cmdPromoteAdmin(bot *SecretSquirrel, ctx *BotContext) {
 	user, err := database.FindUser(bot.Db, database.ByUsername(username))
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByNameError)
+			bot.sendSystemMessage(ctx.User.ID, messages.NoUserByName)
 		}
 	}
 
 	bot.UpdateUser(ctx.User, "rank", database.RankAdmin)
-	bot.sendSystemMessage(user.ID, messages.PromotedAdminMessage)
+	bot.sendSystemMessage(user.ID, messages.PromotedAdmin)
 	bot.sendSystemMessageReply(ctx.User.ID, fmt.Sprintf("User Promoted to Admin: @%s", username), ctx.Message.MessageID)
 }
 
 func cmdRemove(bot *SecretSquirrel, ctx *BotContext) {
 	if !cfg.Limits.AllowRemoveCommand {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.CommandDisabledError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.CommandDisabled, ctx.Message.MessageID)
 		return
 	}
 
@@ -295,7 +295,7 @@ func cmdRemove(bot *SecretSquirrel, ctx *BotContext) {
 
 	// reply required
 	if !ctx.IsReply() {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReplyError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReply, ctx.Message.MessageID)
 		return
 	}
 
@@ -305,7 +305,7 @@ func cmdRemove(bot *SecretSquirrel, ctx *BotContext) {
 		return
 	}
 
-	_, err = bot.sendSystemMessageReply(cm.userID, messages.MessageDeletedMessage, ctx.ReplyID)
+	_, err = bot.sendSystemMessageReply(cm.userID, messages.MessageDeleted, ctx.ReplyID)
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -321,7 +321,7 @@ func cmdDelete(bot *SecretSquirrel, ctx *BotContext) {
 
 	// reply required
 	if !ctx.IsReply() {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReplyError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReply, ctx.Message.MessageID)
 		return
 	}
 
@@ -333,7 +333,7 @@ func cmdDelete(bot *SecretSquirrel, ctx *BotContext) {
 
 	// message already has a warning.
 	if cm.warned {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyWarnedError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyWarned, ctx.Message.MessageID)
 		return
 	}
 
@@ -349,7 +349,7 @@ func cmdWarn(bot *SecretSquirrel, ctx *BotContext) {
 
 	// reply required
 	if !ctx.IsReply() {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReplyError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.NoReply, ctx.Message.MessageID)
 		return
 	}
 
@@ -361,7 +361,7 @@ func cmdWarn(bot *SecretSquirrel, ctx *BotContext) {
 
 	// message already has a warning.
 	if cm.warned {
-		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyWarnedError, ctx.Message.MessageID)
+		bot.sendSystemMessageReply(ctx.User.ID, messages.AlreadyWarned, ctx.Message.MessageID)
 		return
 	}
 
@@ -378,7 +378,7 @@ func cmdBlacklist(bot *SecretSquirrel, ctx *BotContext) {
 
 	// reply required
 	if !ctx.IsReply() {
-		bot.sendSystemMessage(ctx.Message.From.ID, messages.NoReplyError)
+		bot.sendSystemMessage(ctx.Message.From.ID, messages.NoReply)
 		return
 	}
 
@@ -397,7 +397,7 @@ func cmdBlacklist(bot *SecretSquirrel, ctx *BotContext) {
 		BlacklistReason: reason,
 	})
 
-	msg := fmt.Sprintf(messages.BlacklistedError, user.BlacklistReason)
+	msg := fmt.Sprintf(messages.Blacklisted, user.BlacklistReason)
 	if cfg.Bot.BlacklistContact != "" {
 		msg += fmt.Sprintf("\n\nContact: %s", cfg.Bot.BlacklistContact)
 	}
@@ -406,5 +406,5 @@ func cmdBlacklist(bot *SecretSquirrel, ctx *BotContext) {
 }
 
 func cmdVersion(bot *SecretSquirrel, ctx *BotContext) {
-	bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.VersionMessage, BotVersion))
+	bot.sendSystemMessage(ctx.User.ID, fmt.Sprintf(messages.Version, BotVersion))
 }
