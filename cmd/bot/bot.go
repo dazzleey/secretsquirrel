@@ -169,6 +169,8 @@ func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
 	}
 
 	bot.UpdatesUser(&user, database.User{
+		Warnings:      user.Warnings + 1,
+		WarningExpiry: sql.NullTime{Time: time.Now().Add(time.Duration(cfg.Cooldown.WarnExpireHours)), Valid: true},
 		CooldownUntil: sql.NullTime{Time: time.Now().Add(cooldownDuration), Valid: true},
 		Karma:         user.Karma - cfg.Karma.KarmaWarnPenalty,
 	})
@@ -181,6 +183,26 @@ func (bot *SecretSquirrel) giveWarning(ctx *BotContext, cm *CachedMessage) {
 	}
 
 	bot.sendSystemMessageReply(cm.userID, fmt.Sprintf(messages.GivenCooldown, util.TimeStr(cooldownDuration)), replyID)
+}
+
+func (bot *SecretSquirrel) removeWarnings() {
+	users, err := database.FindUsers(bot.Db, database.AreJoined)
+	if err != nil {
+		log.Println("removeWarnings: db query failed.")
+	}
+
+	bot.Db.Transaction(func(tx *gorm.DB) error {
+		for _, u := range users {
+			if u.Warnings > 0 {
+				tx.Model(u).Updates(database.User{
+					WarningExpiry: sql.NullTime{Time: time.Now().Add(time.Duration(cfg.Cooldown.WarnExpireHours)), Valid: true},
+					Warnings:      u.Warnings - 1,
+				})
+				(*bot.Users)[u.ID] = u
+			}
+		}
+		return nil
+	})
 }
 
 func (bot *SecretSquirrel) sendSystemMessage(userID int64, message string) (tgbotapi.Message, error) {
@@ -307,7 +329,8 @@ func initBot() *SecretSquirrel {
 	bot.Spam = NewScoreKeeper()
 
 	bot.Scheduler = gocron.NewScheduler(time.UTC)
-	bot.Scheduler.Every(5).Seconds().Do(bot.Spam.expireTask)
+	bot.Scheduler.Every(15).Seconds().Do(bot.Spam.expireTask)
+	bot.Scheduler.Every(15).Minutes().Do(bot.removeWarnings)
 	bot.Scheduler.Every(6).Hours().Do(bot.Cache.expire)
 	bot.Scheduler.StartAsync()
 

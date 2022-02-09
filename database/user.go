@@ -49,6 +49,7 @@ type User struct {
 	CooldownUntil   sql.NullTime
 	BlacklistReason string
 	Warnings        int
+	WarningExpiry   sql.NullTime
 	Karma           int
 	HideKarma       bool
 	DebugEnabled    bool
@@ -174,6 +175,7 @@ func NewUser(db *gorm.DB, tgUser *tgbotapi.User) *User {
 		CooldownUntil:   sql.NullTime{},
 		BlacklistReason: "",
 		Warnings:        0,
+		WarningExpiry:   sql.NullTime{},
 		Karma:           0,
 		HideKarma:       false,
 		DebugEnabled:    false,
